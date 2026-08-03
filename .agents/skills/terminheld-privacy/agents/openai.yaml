@@ -1,0 +1,6 @@
+interface:
+  display_name: "Terminheld Privacy"
+  short_description: "Repo-specific patterns and workflows for terminheld-privacy"
+  default_prompt: "Use the terminheld-privacy repo skill to follow existing architecture, testing, and workflow conventions."
+policy:
+  allow_implicit_invocation: true
