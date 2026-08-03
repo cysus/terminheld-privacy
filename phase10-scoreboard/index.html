@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Phase 10 Scoreboard</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="app-header">
+  <h1>🃏 Phase 10 Scoreboard</h1>
+  <button id="resetBtn" class="btn btn-ghost" title="Neues Spiel starten">Neues Spiel</button>
+</header>
+
+<main id="app">
+
+  <!-- SETUP -->
+  <section id="setupView" class="view">
+    <h2>Spieler hinzufügen</h2>
+    <form id="addPlayerForm" class="inline-form">
+      <input type="text" id="playerNameInput" placeholder="Spielername" maxlength="20" autocomplete="off" required />
+      <button type="submit" class="btn btn-primary">Hinzufügen</button>
+    </form>
+
+    <ul id="playerList" class="player-list"></ul>
+
+    <p id="setupHint" class="hint">Mindestens 2 Spieler hinzufügen, um zu starten.</p>
+
+    <button id="startGameBtn" class="btn btn-primary btn-large" disabled>Spiel starten</button>
+  </section>
+
+  <!-- GAME -->
+  <section id="gameView" class="view hidden">
+
+    <div id="winnerBanner" class="winner-banner hidden"></div>
+
+    <div class="table-wrap">
+      <table id="scoreTable">
+        <thead>
+          <tr id="playerHeaderRow"></tr>
+        </thead>
+        <tbody id="roundsBody"></tbody>
+        <tfoot>
+          <tr id="totalsRow"></tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div class="game-actions">
+      <button id="addRoundBtn" class="btn btn-primary">+ Neue Runde</button>
+      <button id="undoRoundBtn" class="btn btn-secondary" disabled>Letzte Runde löschen</button>
+    </div>
+
+    <details id="phaseReference" class="phase-reference">
+      <summary>Phasen-Übersicht</summary>
+      <ol id="phaseList"></ol>
+    </details>
+  </section>
+
+</main>
+
+<!-- ROUND ENTRY MODAL -->
+<div id="roundModal" class="modal hidden">
+  <div class="modal-content">
+    <h2>Runde <span id="roundNumberLabel"></span> eintragen</h2>
+    <form id="roundForm">
+      <div id="roundInputs" class="round-inputs"></div>
+      <div class="modal-actions">
+        <button type="button" id="cancelRoundBtn" class="btn btn-ghost">Abbrechen</button>
+        <button type="submit" class="btn btn-primary">Runde speichern</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- CONFIRM RESET MODAL -->
+<div id="confirmModal" class="modal hidden">
+  <div class="modal-content">
+    <h2>Neues Spiel starten?</h2>
+    <p>Der aktuelle Spielstand geht dabei verloren.</p>
+    <div class="modal-actions">
+      <button type="button" id="cancelResetBtn" class="btn btn-ghost">Abbrechen</button>
+      <button type="button" id="confirmResetBtn" class="btn btn-danger">Ja, zurücksetzen</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

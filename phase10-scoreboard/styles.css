@@ -1,0 +1,309 @@
+:root {
+  --bg: #0f2027;
+  --bg-gradient: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+  --felt: #1b3b2f;
+  --surface: #16323a;
+  --surface-2: #1e3f47;
+  --border: #2c5f66;
+  --text: #eaf6f6;
+  --text-dim: #9fc2c2;
+  --accent: #f2b134;
+  --accent-2: #4fd1c5;
+  --danger: #e35d5d;
+  --success: #4caf7d;
+  --radius: 12px;
+  font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg-gradient);
+  color: var(--text);
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.app-header h1 {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+#app {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 3rem;
+}
+
+.view.hidden { display: none; }
+
+h2 { margin-top: 0; }
+
+.hint { color: var(--text-dim); font-size: 0.9rem; }
+
+/* Buttons */
+.btn {
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: transform 0.08s ease, filter 0.15s ease;
+}
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-primary { background: var(--accent); color: #241a00; }
+.btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+
+.btn-secondary { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover:not(:disabled) { filter: brightness(1.15); }
+
+.btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.btn-ghost:hover { background: rgba(255,255,255,0.06); }
+
+.btn-danger { background: var(--danger); color: #2a0000; }
+.btn-danger:hover { filter: brightness(1.08); }
+
+.btn-large { width: 100%; padding: 0.85rem; font-size: 1.05rem; margin-top: 1rem; }
+
+/* Setup */
+.inline-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.inline-form input {
+  flex: 1;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1rem;
+}
+.inline-form input:focus { outline: 2px solid var(--accent-2); }
+
+.player-list {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.player-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.85rem;
+}
+.player-list .remove-player {
+  background: transparent;
+  border: none;
+  color: var(--danger);
+  font-size: 1.1rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0.25rem 0.5rem;
+}
+
+/* Score table */
+.table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--felt);
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 420px;
+}
+
+thead th {
+  background: rgba(0,0,0,0.3);
+  padding: 0.65rem 0.75rem;
+  text-align: center;
+  position: sticky;
+  top: 0;
+}
+
+.player-col-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+
+.player-name-header { font-weight: 700; }
+
+.phase-badge {
+  display: inline-block;
+  background: var(--accent-2);
+  color: #052824;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+.phase-badge.done {
+  background: var(--success);
+  color: #052824;
+}
+
+tbody td, tfoot td {
+  padding: 0.55rem 0.75rem;
+  text-align: center;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.round-num-cell {
+  color: var(--text-dim);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.score-cell.phase-hit { color: var(--success); font-weight: 700; }
+
+tfoot tr {
+  background: rgba(0,0,0,0.25);
+  font-weight: 700;
+}
+tfoot td { border-top: 2px solid var(--border); }
+
+.leader-col { color: var(--accent); }
+
+.game-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.winner-banner {
+  background: linear-gradient(90deg, #f2b134, #4fd1c5);
+  color: #10241f;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius);
+  font-weight: 700;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+.winner-banner.hidden { display: none; }
+
+/* Phase reference */
+.phase-reference {
+  margin-top: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+}
+.phase-reference summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+#phaseList {
+  margin: 0.75rem 0 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+/* Modal */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 50;
+}
+.modal.hidden { display: none; }
+
+.modal-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.round-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  margin: 1rem 0;
+}
+
+.round-input-row {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.65rem 0.85rem;
+  background: var(--surface-2);
+}
+.round-input-row .row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+.round-input-row label.player-label {
+  font-weight: 700;
+}
+.round-input-row .current-phase-hint {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.round-input-row input[type="number"] {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1rem;
+}
+.round-input-row .checkbox-line {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 480px) {
+  .app-header h1 { font-size: 1.05rem; }
+  thead th, tbody td, tfoot td { padding: 0.45rem 0.5rem; font-size: 0.9rem; }
+}
