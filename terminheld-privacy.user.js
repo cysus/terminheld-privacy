@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         TERMINHELD Privacy V23.1
+// @name         TERMINHELD Privacy V23.2
 // @namespace    https://github.com/cysus/terminheld-privacy
-// @version      23.1.0
+// @version      23.2.0
 // @description  Ersetzt Patientennamen durch Pseudonyme und maskiert Telefonnummern, Adressen und E-Mail-Adressen, bevor KI-Assistenten die Seite lesen. Eingabefelder bleiben unangetastet. RDP-Optimiert.
 // @match        https://mein.terminheld.de/*
 // @updateURL    https://raw.githubusercontent.com/cysus/terminheld-privacy/main/terminheld-privacy.user.js
@@ -87,9 +87,9 @@
     const CALENDAR_NAME = /(?<![\p{L}\p{M}'’])\p{Lu}[\p{L}\p{M}'’\-]*(?:\s+\p{Lu}[\p{L}\p{M}'’\-]*)*,\s*\p{Lu}[\p{L}\p{M}'’\-]*(?:\s+\p{Lu}[\p{L}\p{M}'’\-]*)*/gu;
 
     // Bereiche mit ausschließlich persönlichen Daten, Inhalt wird komplett maskiert:
-    // Kopf der Lupe (Name, Geburtsdatum, Telefon) und die Stammdaten-Felder
+    // Kopf der Lupe (Name, Geburtsdatum, Telefon), Kopf der Akte (Name, Geburtsdatum) und die Stammdaten-Felder
     // (Telefon, E-Mail, Adresse, Versichertenkarte, Briefanrede, wichtige Doku-Einträge)
-    const FULL_MASK_SELECTOR = '.MagnifierObjectCard .ListItem-content, .MagnifierFieldset-content';
+    const FULL_MASK_SELECTOR = '.MagnifierObjectCard .ListItem-content, .ContactFileTab h2, .MagnifierFieldset-content';
 
     // Kontaktdaten außerhalb der Kontaktfelder (Notizen, Termintitel, Tooltips)
     const PHONE = /(?:\+|\b0)\d[\d \/\-()]{4,}\d/g;
