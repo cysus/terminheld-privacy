@@ -77,11 +77,13 @@
         '.t-card-title'
     ];
     const SOURCE_SELECTOR = sourceSelectors.join(',');
+    // Hauptmenü nutzt dieselbe Klasse wie die Patientenliste; Menüpunkte sind keine Namen
+    const SOURCE_EXCLUDE = '.MainNavigation';
 
-    // Kontaktfelder in der Lupe/Akte: Inhalt wird komplett maskiert (Telefon, Adresse, E-Mail, Versichertenkarte)
-    const CONTACT_FIELDSET = '.MagnifierFieldset';
-    const CONTACT_CONTENT = '.MagnifierFieldset-content';
-    const CONTACT_ICONS = '.bicon-phone, .bicon-house, .bicon-at, .bicon-chipcard';
+    // Bereiche mit ausschließlich persönlichen Daten, Inhalt wird komplett maskiert:
+    // Kopf der Lupe (Name, Geburtsdatum, Telefon) und die Stammdaten-Felder
+    // (Telefon, E-Mail, Adresse, Versichertenkarte, Briefanrede, wichtige Doku-Einträge)
+    const FULL_MASK_SELECTOR = '.MagnifierObjectCard .ListItem-content, .MagnifierFieldset-content';
 
     // Kontaktdaten außerhalb der Kontaktfelder (Notizen, Termintitel, Tooltips)
     const PHONE = /(?:\+|\b0)\d[\d \/\-()]{4,}\d/g;
@@ -231,9 +233,7 @@
     }
 
     function isContactField(el) {
-        if (!el.closest(CONTACT_CONTENT)) return false;
-        const fieldset = el.closest(CONTACT_FIELDSET);
-        return !!fieldset && !!fieldset.querySelector(CONTACT_ICONS);
+        return !!el.closest(FULL_MASK_SELECTOR);
     }
 
     function maskText(text) {
@@ -263,11 +263,12 @@
         const el = root.nodeType === Node.ELEMENT_NODE ? root : root.parentElement;
         if (!el) return false;
         let added = false;
+        const learnSource = source => {
+            if (!source.closest(SOURCE_EXCLUDE) && learnText(source.textContent)) added = true;
+        };
         const source = el.closest(SOURCE_SELECTOR);
-        if (source && learnText(source.textContent)) added = true;
-        el.querySelectorAll(SOURCE_SELECTOR).forEach(source => {
-            if (learnText(source.textContent)) added = true;
-        });
+        if (source) learnSource(source);
+        el.querySelectorAll(SOURCE_SELECTOR).forEach(learnSource);
         if (added) {
             matchCache.clear();
             saveNames();
