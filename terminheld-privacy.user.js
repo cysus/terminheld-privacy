@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         TERMINHELD Privacy V22
+// @name         TERMINHELD Privacy V23
 // @namespace    https://github.com/cysus/terminheld-privacy
-// @version      22.0.0
-// @description  Maskiert Patientennamen, Telefonnummern, Adressen und E-Mail-Adressen in der Anzeige (KI-Schutz). Eingabefelder bleiben unangetastet. RDP-Optimiert.
+// @version      23.0.0
+// @description  Ersetzt Patientennamen durch Pseudonyme und maskiert Telefonnummern, Adressen und E-Mail-Adressen, bevor KI-Assistenten die Seite lesen. Eingabefelder bleiben unangetastet. RDP-Optimiert.
 // @match        https://mein.terminheld.de/*
 // @updateURL    https://raw.githubusercontent.com/cysus/terminheld-privacy/main/terminheld-privacy.user.js
 // @downloadURL  https://raw.githubusercontent.com/cysus/terminheld-privacy/main/terminheld-privacy.user.js
@@ -40,7 +40,8 @@
     // Bewusst NICHT enthalten: Wörter, die auch Nachnamen sind (Vater, Kind, Bruder, Laut, Stand, Ton, Klang, Wort, Ziel).
     const ignoreWords = [
         // Struktur
-        'familie', 'herr', 'frau', 'dr', 'prof', 'von', 'und', 'oder',
+        'familie', 'fam', 'herr', 'herrn', 'hr', 'frau', 'fr', 'dr', 'prof', 'med', 'dipl', 'von', 'und', 'oder',
+        'person', 'name',
         'der', 'die', 'das', 'dem', 'den', 'zu', 'im', 'in', 'am', 'mit', 'auf',
         // Kontakt & UI
         'tel', 'mobil', 'fax', 'mail', 'email', 'straße', 'str', 'nr',
@@ -108,16 +109,17 @@
         '[data-th-privacy]'
     ].join(',');
 
-    const TOKEN = /[\p{L}\p{M}]+/gu;
+    // Wörter inkl. Apostroph-Namen ("D'Angelo")
+    const TOKEN = /[\p{L}\p{M}]+(?:['’][\p{L}\p{M}]+)*/gu;
     // E-Mail-Adressen, Benutzernamen: dort stehen Namen auch kleingeschrieben
     const ADDRESS = /[@_]|[\p{L}\d]\.\p{L}/u;
-    const NAMES_STORAGE_KEY = 'terminheld_privacy_names';
+    const NAMES_STORAGE_KEY = 'terminheld_privacy_persons';
     const POSITION_STORAGE_KEY = 'terminheld_privacy_pos';
 
     // --- 3. HELPER ---
     // Vergleichsform: klein, ohne Akzente ("François" -> "francois", "Yılmaz" -> "yilmaz")
     function fold(word) {
-        return word.toLowerCase().normalize('NFD').replace(/\p{M}+/gu, '').replace(/ı/g, 'i');
+        return word.toLowerCase().normalize('NFD').replace(/\p{M}+/gu, '').replace(/ı/g, 'i').replace(/’/g, "'");
     }
 
     const ignoreList = new Set(ignoreWords.map(fold));
@@ -140,44 +142,63 @@
         return matrix[b.length][a.length];
     }
 
-    // Gelernte Namen (in Vergleichsform), nach Anfangsbuchstabe gruppiert für schnellen Fuzzy-Vergleich
-    const sensitiveNames = new Set();
+    // Gelernte Namen (in Vergleichsform) und zu welcher Person sie gehören.
+    // Pseudonyme statt Anfangsbuchstaben: Die KI kann Personen auseinanderhalten, aber nicht identifizieren.
+    const tokenPersons = new Map();   // Name -> Personennummern (mehrere = mehrdeutig, z. B. gleicher Vorname)
+    const personTokens = new Map();   // Personennummer -> Namen
     const namesByInitial = new Map();
+    const learnedTexts = new Set();
     const matchCache = new Map();
+    let personCount = 0;
 
-    function addSensitive(name) {
-        const folded = fold(name);
-        if (sensitiveNames.has(folded)) return false;
-        sensitiveNames.add(folded);
-        if (!namesByInitial.has(folded[0])) namesByInitial.set(folded[0], []);
-        namesByInitial.get(folded[0]).push(folded);
-        return true;
+    // Anreden und Titel: Großgeschriebene Wörter danach sind Namen, auch wenn sie nie gelernt wurden
+    const SALUTATIONS = new Set(['frau', 'herr', 'herrn', 'fr', 'hr', 'familie', 'fam']);
+    const TITLES = new Set(['dr', 'prof', 'med', 'dipl']);
+    const ABBREVIATIONS = new Set(['fr', 'hr', 'fam', 'dr', 'prof', 'med', 'dipl']);
+    const PLACEHOLDER = /\[(?:Person \d+|Name)\]/g;
+
+    function linkName(folded, person) {
+        if (!tokenPersons.has(folded)) {
+            tokenPersons.set(folded, new Set());
+            if (!namesByInitial.has(folded[0])) namesByInitial.set(folded[0], []);
+            namesByInitial.get(folded[0]).push(folded);
+        }
+        tokenPersons.get(folded).add(person);
+        if (!personTokens.has(person)) personTokens.set(person, new Set());
+        personTokens.get(person).add(folded);
+        personCount = Math.max(personCount, person);
     }
 
     function loadNames() {
         try {
-            JSON.parse(sessionStorage.getItem(NAMES_STORAGE_KEY) || '[]').forEach(addSensitive);
+            const saved = JSON.parse(sessionStorage.getItem(NAMES_STORAGE_KEY) || '[]');
+            saved.forEach(([folded, persons]) => persons.forEach(person => linkName(folded, person)));
         } catch (e) { /* Speicher nicht verfügbar oder kaputt: neu lernen */ }
     }
 
     function saveNames() {
         try {
-            sessionStorage.setItem(NAMES_STORAGE_KEY, JSON.stringify([...sensitiveNames]));
+            const entries = [...tokenPersons].map(([folded, persons]) => [folded, [...persons]]);
+            sessionStorage.setItem(NAMES_STORAGE_KEY, JSON.stringify(entries));
         } catch (e) { /* nur Komfort */ }
     }
 
-    function isSensitive(word, inAddress) {
+    function isLowerCaseWord(word) {
+        const firstChar = word[0];
+        return (firstChar === firstChar.toLowerCase()) && (firstChar !== firstChar.toUpperCase());
+    }
+
+    // Liefert den gelernten Namen, dem das Wort entspricht, sonst null
+    function findName(word, inAddress) {
         const folded = fold(word);
-        if (folded.length < 2 || ignoreList.has(folded)) return false;
+        if (folded.length < 2 || ignoreList.has(folded)) return null;
 
         // SMART CASING: kurz und kleingeschrieben -> wahrscheinlich Adjektiv/Verb ("zu laut").
         // Ausnahme: in E-Mail-Adressen sind Namen kleingeschrieben.
-        const firstChar = word[0];
-        const isLowerCase = (firstChar === firstChar.toLowerCase()) && (firstChar !== firstChar.toUpperCase());
-        if (isLowerCase && folded.length <= 4 && !inAddress) return false;
+        if (isLowerCaseWord(word) && folded.length <= 4 && !inAddress) return null;
 
-        if (sensitiveNames.has(folded)) return true;
-        if (folded.length < 3) return false;
+        if (tokenPersons.has(folded)) return folded;
+        if (folded.length < 3) return null;
 
         // Tippfehler-Toleranz, nur bei gleichem Anfangsbuchstaben (Performance)
         for (const sensitive of namesByInitial.get(folded[0]) || []) {
@@ -185,31 +206,98 @@
             if (sensitive.length > 4) allowedErrors = 1;
             if (sensitive.length > 7) allowedErrors = 2;
             if (allowedErrors === 0 || Math.abs(sensitive.length - folded.length) > allowedErrors) continue;
-            if (levenshtein(sensitive, folded) <= allowedErrors) return true;
+            if (levenshtein(sensitive, folded) <= allowedErrors) return sensitive;
         }
-        return false;
+        return null;
     }
 
-    function matches(word, inAddress) {
+    function matchName(word, inAddress) {
         const key = (inAddress ? '@' : '') + word;
-        let result = matchCache.get(key);
-        if (result === undefined) {
+        if (!matchCache.has(key)) {
             if (matchCache.size > 20000) matchCache.clear();
-            result = isSensitive(word, inAddress);
-            matchCache.set(key, result);
+            matchCache.set(key, findName(word, inAddress));
         }
-        return result;
+        return matchCache.get(key);
     }
 
-    function getMaskedString(word) {
-        const chars = Array.from(word);
-        if (chars.length <= 1) return word;
-        return chars[0] + '*'.repeat(Math.min(chars.length - 1, 5));
+    // Personennummer eines Namens; 0 = mehrdeutig
+    function personOf(folded) {
+        const persons = tokenPersons.get(folded);
+        return persons.size === 1 ? [...persons][0] : 0;
     }
 
-    // Jedes Wort maskieren, jede Ziffer durch * ersetzen
+    function placeholder(person) {
+        return person ? `[Person ${person}]` : '[Name]';
+    }
+
+    // Wort (ohne Leerzeichen) um eine Textstelle herum, z. B. eine E-Mail-Adresse
+    function chunkAround(text, start, end) {
+        while (start > 0 && !/\s/.test(text[start - 1])) start--;
+        while (end < text.length && !/\s/.test(text[end])) end++;
+        return text.slice(start, end);
+    }
+
+    // Namen durch Pseudonyme ersetzen. "Frau Erika Musterfrau" -> "Frau [Person 3]"
+    function maskNames(text) {
+        const found = [];
+        let afterSalutation = 0;   // wie viele folgende Wörter noch als Name gelten
+        let previousWord = '';
+        let previousEnd = 0;
+
+        for (const match of text.matchAll(TOKEN)) {
+            const word = match[0];
+            const start = match.index;
+            const end = start + word.length;
+            const gap = text.slice(previousEnd, start);
+            const lower = word.toLowerCase();
+
+            // Die Anrede gilt nur für direkt folgende Wörter ("Dr." darf einen Punkt haben)
+            const gapAllowed = /^\s+$/.test(gap) || (ABBREVIATIONS.has(previousWord) && /^\.\s*$/.test(gap));
+            if (!gapAllowed) afterSalutation = 0;
+
+            const inAddress = isLowerCaseWord(word) && word.length <= 4 && ADDRESS.test(chunkAround(text, start, end));
+            const name = matchName(word, inAddress);
+            if (name) {
+                found.push({ start, end, person: personOf(name) });
+            } else if (afterSalutation > 0 && !isLowerCaseWord(word) && !ignoreList.has(fold(word))) {
+                found.push({ start, end, person: 0 });
+            }
+
+            if (SALUTATIONS.has(lower)) afterSalutation = 2;
+            else if (!TITLES.has(lower) && afterSalutation > 0) afterSalutation--;
+            previousWord = lower;
+            previousEnd = end;
+        }
+        if (found.length === 0) return text;
+
+        // Benachbarte Namensteile derselben Person zu einem Pseudonym zusammenfassen
+        let result = '';
+        let cursor = 0;
+        let group = null;
+        const flush = () => {
+            if (!group) return;
+            result += text.slice(cursor, group.start) + placeholder(group.person);
+            cursor = group.end;
+            group = null;
+        };
+        for (const part of found) {
+            const adjacent = group && /^[\s,\-]*$/.test(text.slice(group.end, part.start));
+            const samePerson = group && (!part.person || !group.person || part.person === group.person);
+            if (adjacent && samePerson) {
+                group.end = part.end;
+                if (!group.person) group.person = part.person;
+            } else {
+                flush();
+                group = { ...part };
+            }
+        }
+        flush();
+        return result + text.slice(cursor);
+    }
+
+    // Jedes Wort durch *** und jede Ziffer durch * ersetzen
     function maskAllCharacters(text) {
-        return text.replace(/[\p{L}\p{M}]+|\d/gu, part => /\d/.test(part) ? '*' : getMaskedString(part));
+        return text.replace(/[\p{L}\p{M}]+|\d/gu, part => /\d/.test(part) ? '*' : '***');
     }
 
     function maskContactData(text) {
@@ -224,37 +312,61 @@
         return result;
     }
 
-    // Inhalt eines Kontaktfelds: alles außer Beschriftungen wie "(Privat)"
+    function maskText(text) {
+        if (!text) return text;
+        return maskNames(maskContactData(text));
+    }
+
+    // Inhalt eines Kontaktfelds: Namen als Pseudonym, alles andere außer Beschriftungen wie "(Privat)" als ***
     function maskContactField(text) {
-        return text.replace(/[\p{L}\p{M}]+|\d/gu, part => {
-            if (/\d/.test(part)) return '*';
-            return ignoreList.has(fold(part)) ? part : getMaskedString(part);
-        });
+        if (!text) return text;
+        return maskText(text).split(/(\[(?:Person \d+|Name)\])/).map((part, i) => {
+            if (i % 2 === 1) return part;
+            return part.replace(/[\p{L}\p{M}]+|\d/gu, piece => {
+                if (/\d/.test(piece)) return '*';
+                return ignoreList.has(fold(piece)) ? piece : '***';
+            });
+        }).join('');
     }
 
     function isContactField(el) {
         return !!el.closest(FULL_MASK_SELECTOR);
     }
 
-    function maskText(text) {
-        if (!text) return text;
-        text = maskContactData(text);
-        if (sensitiveNames.size === 0) return text;
-        return text.split(/(\s+)/).map(chunk => {
-            const inAddress = ADDRESS.test(chunk);
-            return chunk.replace(TOKEN, word => matches(word, inAddress) ? getMaskedString(word) : word);
-        }).join('');
-    }
-
     // --- 4. LOGIK ---
+    // Text einer Namensquelle (z. B. Listeneintrag) gehört zu genau einer Person
     function learnText(text) {
-        let added = false;
+        text = text.replace(PLACEHOLDER, ' ');
+        if (learnedTexts.has(text)) return false;
+        if (learnedTexts.size > 5000) learnedTexts.clear();
+        learnedTexts.add(text);
+
+        const names = [];
         for (const word of text.match(TOKEN) || []) {
             const folded = fold(word);
             if (folded.length < 2 || ignoreList.has(folded)) continue;
             // Zweibuchstabige Namen ("Li", "Ng") nur, wenn großgeschrieben
-            if (folded.length === 2 && word[0] === word[0].toLowerCase()) continue;
-            if (addSensitive(word)) added = true;
+            if (folded.length === 2 && isLowerCaseWord(word)) continue;
+            if (!names.includes(folded)) names.push(folded);
+        }
+        if (names.length === 0) return false;
+
+        // Bekannte Person, wenn ihre Namen und die des Textes ineinander enthalten sind
+        // ("Erika Musterfrau" und später "Musterfrau, Erika" oder nur "Erika")
+        const candidates = new Set();
+        names.forEach(folded => (tokenPersons.get(folded) || []).forEach(person => candidates.add(person)));
+        const matching = [...candidates].filter(person => {
+            const known = personTokens.get(person);
+            return [...known].every(folded => names.includes(folded)) || names.every(folded => known.has(folded));
+        });
+        const person = matching.length === 1 ? matching[0] : personCount + 1;
+
+        let added = false;
+        for (const folded of names) {
+            if (!tokenPersons.has(folded) || !tokenPersons.get(folded).has(person)) {
+                linkName(folded, person);
+                added = true;
+            }
         }
         return added;
     }
