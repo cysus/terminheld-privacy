@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         TERMINHELD Privacy V23
+// @name         TERMINHELD Privacy V23.1
 // @namespace    https://github.com/cysus/terminheld-privacy
-// @version      23.0.0
+// @version      23.1.0
 // @description  Ersetzt Patientennamen durch Pseudonyme und maskiert Telefonnummern, Adressen und E-Mail-Adressen, bevor KI-Assistenten die Seite lesen. Eingabefelder bleiben unangetastet. RDP-Optimiert.
 // @match        https://mein.terminheld.de/*
 // @updateURL    https://raw.githubusercontent.com/cysus/terminheld-privacy/main/terminheld-privacy.user.js
@@ -80,6 +80,11 @@
     const SOURCE_SELECTOR = sourceSelectors.join(',');
     // Hauptmenü nutzt dieselbe Klasse wie die Patientenliste; Menüpunkte sind keine Namen
     const SOURCE_EXCLUDE = '.MainNavigation';
+
+    // Kalender (DayPilot): Termine heißen "11:30 Nachname, Vorname – Leistung".
+    // Nur "Nachname, Vorname" wird gelernt, Termine wie "Orga" oder "TEAM" nicht.
+    const CALENDAR_SELECTOR = '#dpCalendar';
+    const CALENDAR_NAME = /(?<![\p{L}\p{M}'’])\p{Lu}[\p{L}\p{M}'’\-]*(?:\s+\p{Lu}[\p{L}\p{M}'’\-]*)*,\s*\p{Lu}[\p{L}\p{M}'’\-]*(?:\s+\p{Lu}[\p{L}\p{M}'’\-]*)*/gu;
 
     // Bereiche mit ausschließlich persönlichen Daten, Inhalt wird komplett maskiert:
     // Kopf der Lupe (Name, Geburtsdatum, Telefon) und die Stammdaten-Felder
@@ -381,6 +386,18 @@
         const source = el.closest(SOURCE_SELECTOR);
         if (source) learnSource(source);
         el.querySelectorAll(SOURCE_SELECTOR).forEach(learnSource);
+
+        const calendars = el.closest(CALENDAR_SELECTOR) ? [el] : el.querySelectorAll(CALENDAR_SELECTOR);
+        calendars.forEach(calendar => {
+            const walker = document.createTreeWalker(calendar, NodeFilter.SHOW_TEXT);
+            let node;
+            while ((node = walker.nextNode())) {
+                for (const match of node.nodeValue.matchAll(CALENDAR_NAME)) {
+                    if (learnText(match[0])) added = true;
+                }
+            }
+        });
+
         if (added) {
             matchCache.clear();
             saveNames();
