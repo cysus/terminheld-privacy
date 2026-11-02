@@ -2,7 +2,7 @@
 // @name         TERMINHELD Privacy V22
 // @namespace    https://github.com/cysus/terminheld-privacy
 // @version      22.0.0
-// @description  Maskiert Patientennamen in der Anzeige (KI-Schutz). Unicode-Namen, E-Mail-Adressen, Tab-Titel und Tooltips; Eingabefelder bleiben unangetastet. RDP-Optimiert.
+// @description  Maskiert Patientennamen, Telefonnummern, Adressen und E-Mail-Adressen in der Anzeige (KI-Schutz). Eingabefelder bleiben unangetastet. RDP-Optimiert.
 // @match        https://mein.terminheld.de/*
 // @updateURL    https://raw.githubusercontent.com/cysus/terminheld-privacy/main/terminheld-privacy.user.js
 // @downloadURL  https://raw.githubusercontent.com/cysus/terminheld-privacy/main/terminheld-privacy.user.js
@@ -78,9 +78,24 @@
     ];
     const SOURCE_SELECTOR = sourceSelectors.join(',');
 
+    // Kontaktfelder in der Lupe/Akte: Inhalt wird komplett maskiert (Telefon, Adresse, E-Mail, Versichertenkarte)
+    const CONTACT_FIELDSET = '.MagnifierFieldset';
+    const CONTACT_CONTENT = '.MagnifierFieldset-content';
+    const CONTACT_ICONS = '.bicon-phone, .bicon-house, .bicon-at, .bicon-chipcard';
+
+    // Kontaktdaten außerhalb der Kontaktfelder (Notizen, Termintitel, Tooltips)
+    const PHONE = /(?:\+|\b0)\d[\d \/\-()]{4,}\d/g;
+    const STREET = /(?<!\p{L})(?:\p{Lu}[\p{L}\-]*\s+)?[\p{L}\-]*(?:[Ss]tra(?:ße|sse)|[Ss]tr\.|[Ww]eg|[Pp]latz|[Aa]llee|[Gg]asse|[Rr]ing|[Dd]amm|[Uu]fer|[Cc]haussee|[Pp]fad|[Ss]teig|[Hh]of|[Mm]arkt)\s*\d{1,4}\s?[a-zA-Z]?(?![\p{L}\d])/gu;
+    const POSTCODE_CITY = /(?<!\d)\d{5}\s+\p{Lu}[\p{L}\-]+/gu;
+    const EMAIL = /[\p{L}\d._%+\-]+@[\p{L}\d.\-]+\.\p{L}{2,}/gu;
+    // Krankenversichertennummer: Buchstabe + 9 Ziffern
+    const INSURANCE_NUMBER = /\b[A-Z]\d{9}\b/g;
+    const CONTACT_PATTERNS = [EMAIL, INSURANCE_NUMBER, STREET, POSTCODE_CITY, PHONE];
+
     // Attribute, die angezeigt bzw. von KI-Tools gelesen, aber nie an den Server geschickt werden.
-    const MASKED_ATTRIBUTES = ['title', 'aria-label', 'alt', 'placeholder'];
-    const ATTRIBUTE_SELECTOR = MASKED_ATTRIBUTES.map(name => `[${name}]`).join(',');
+    // href nur bei tel:/mailto:-Links.
+    const MASKED_ATTRIBUTES = ['title', 'aria-label', 'alt', 'placeholder', 'href'];
+    const ATTRIBUTE_SELECTOR = '[title],[aria-label],[alt],[placeholder],[href^="tel:" i],[href^="mailto:" i]';
 
     // Text in diesen Elementen wird nie verändert: Eingaben würden sonst maskiert gespeichert.
     // option ohne value-Attribut sendet seinen Text als Wert mit.
@@ -190,8 +205,41 @@
         return chars[0] + '*'.repeat(Math.min(chars.length - 1, 5));
     }
 
+    // Jedes Wort maskieren, jede Ziffer durch * ersetzen
+    function maskAllCharacters(text) {
+        return text.replace(/[\p{L}\p{M}]+|\d/gu, part => /\d/.test(part) ? '*' : getMaskedString(part));
+    }
+
+    function maskContactData(text) {
+        if (!/[\d@]/.test(text)) return text;
+        let result = text;
+        for (const pattern of CONTACT_PATTERNS) {
+            result = result.replace(pattern, match => {
+                if (pattern === PHONE && match.replace(/\D/g, '').length < 7) return match;
+                return maskAllCharacters(match);
+            });
+        }
+        return result;
+    }
+
+    // Inhalt eines Kontaktfelds: alles außer Beschriftungen wie "(Privat)"
+    function maskContactField(text) {
+        return text.replace(/[\p{L}\p{M}]+|\d/gu, part => {
+            if (/\d/.test(part)) return '*';
+            return ignoreList.has(fold(part)) ? part : getMaskedString(part);
+        });
+    }
+
+    function isContactField(el) {
+        if (!el.closest(CONTACT_CONTENT)) return false;
+        const fieldset = el.closest(CONTACT_FIELDSET);
+        return !!fieldset && !!fieldset.querySelector(CONTACT_ICONS);
+    }
+
     function maskText(text) {
-        if (sensitiveNames.size === 0 || !text) return text;
+        if (!text) return text;
+        text = maskContactData(text);
+        if (sensitiveNames.size === 0) return text;
         return text.split(/(\s+)/).map(chunk => {
             const inAddress = ADDRESS.test(chunk);
             return chunk.replace(TOKEN, word => matches(word, inAddress) ? getMaskedString(word) : word);
@@ -239,7 +287,7 @@
         const entry = textCache.get(node);
         // Hat Terminheld den Text inzwischen selbst geändert, gilt der neue Text als Original
         const original = (entry && current === entry.masked) ? entry.original : current;
-        const masked = maskText(original);
+        const masked = isContactField(parent) ? maskContactField(original) : maskText(original);
 
         if (masked === original) {
             textCache.delete(node);
@@ -257,7 +305,13 @@
         let entries = attributeCache.get(el);
         const entry = entries && entries.get(name);
         const original = (entry && current === entry.masked) ? entry.original : current;
-        const masked = maskText(original);
+        let masked = original;
+        if (name !== 'href') {
+            masked = maskText(original);
+        } else if (/^(tel|mailto):/i.test(original)) {
+            const scheme = original.slice(0, original.indexOf(':') + 1);
+            masked = scheme + maskAllCharacters(original.slice(scheme.length));
+        }
 
         if (masked === original) {
             if (entry) entries.delete(name);
